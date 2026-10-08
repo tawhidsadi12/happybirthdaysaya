@@ -67,13 +67,13 @@ const CONFIG = {
   her: "Saya", me: "Tawhid", birthday: "2026-10-08",
   lockLine: "This part is locked. Only you can open it.",
   passwords: ["01022005", "08102010"], // not used: only the 5th attempt unlocks
-  failFirst: 4,                        // attempts 1-4 ALWAYS fail, attempt 5+ unlocks ANYTHING
+  failFirst: 1,                        // attempts 1-4 ALWAYS fail, attempt 5+ unlocks ANYTHING
   hint: "Hint: the day it all began (DDMMYY) 🤍",
   logUrl: "https://docs.google.com/forms/d/e/1FAIpQLSdJeb1JGe_FYUV-lGq5oduSaWRKQc4wwSkMpXMsvW0IwoTWig/viewform?usp=pp_url",
   logPrefill: "",  // <- PASTE the full pre-filled link here (from Get pre-filled link, with "test" typed in Entry)
   logField: "entry.REPLACE_ME", // or paste just the entry ID here
 
-  appUrl: "https://docs.google.com/forms/d/e/1FAIpQLSeaKT9xprZ81fwnvW6p3BqbY_Jf1OE2zcffuuGY68U8KykseQ/formResponse",
+  appUrl: "https://forms.gle/VJwLbXQqi9EXjr5t9",
   appPrefill: "",  // <- PASTE the full pre-filled link of the APPLICATION form here (optional)
   appField: "entry.REPLACE_ME", // or paste just the entry ID here
   uploadUrl: "https://forms.gle/hX7LPHEgzM7hzFdMA",
@@ -92,8 +92,9 @@ const CONFIG = {
  finalEnd:"Happy Birthday"
 };
 /* ===== engine ===== */
-{const m=String(CONFIG.logPrefill||"").match(/entry\.\d+/);if(m)CONFIG.logField=m[0]}
-{const m=String(CONFIG.appPrefill||"").match(/entry\.\d+/);if(m)CONFIG.appField=m[0]}
+/* paste the full pre-filled link into logPrefill / appPrefill: entry ID and the formResponse URL are derived automatically */
+function fromPrefill(link,fieldKey,urlKey){const l=String(link||""),m=l.match(/entry\.\d+/),f=l.match(/\/forms\/d\/e\/([^\/?#]+)/);if(m)CONFIG[fieldKey]=m[0];if(f)CONFIG[urlKey]="https://docs.google.com/forms/d/e/"+f[1]+"/formResponse"}
+fromPrefill(CONFIG.logPrefill,"logField","logUrl");fromPrefill(CONFIG.appPrefill,"appField","appUrl");
 if(!/^entry\.\d+$/.test(CONFIG.logField))console.warn('Attempt logging is OFF: set logPrefill/logField in CONFIG');
 if(!/^entry\.\d+$/.test(CONFIG.appField))console.warn('Application sending is OFF: set appPrefill/appField in CONFIG');
 const $=(s,r)=> (r||document).querySelector(s),C=CONFIG,root=$('#root'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -142,18 +143,30 @@ C.envelopes.forEach(e=>{const b=document.createElement('button');b.className='en
  const nb=document.createElement('button');nb.className='btn';nb.textContent='One last thing \u2192';nb.onclick=()=>go(sc.indexOf(last));s8.appendChild(nb)};$('#ev').appendChild(b)});
 const last=scene(`<p class="sub serif" style="font-size:1.6rem">${C.finalLead}</p><h2 style="margin-top:12px">${C.finalMsg}</h2><h1 style="margin-top:26px;color:var(--rose)">${C.finalEnd},<br>${C.her}</h1>`,"One more thing \u2192");
 last.dataset.fin=1;
-const appS=scene(`<h2>Apply to me \u{1F90D}</h2><p>Write your application, or send me something.</p><textarea id="appText" rows="8" placeholder="Write your application here..."></textarea><button id="appSend" type="button">Send application</button><p id="appStatus" aria-live="polite"></p><hr /><p>Or send a photo, video or file:</p><button id="appUpload" type="button">Upload something \u{1F4CE}</button>`);appS.id='application';
+const appS=scene(`<h2>Something For Me? \u{1F90D}</h2><p>Write your application, or send me something.</p><textarea id="appText" rows="8" placeholder="Write your application here..."></textarea><button id="appSend" type="button">Send application</button><p id="appStatus" aria-live="polite"></p><hr /><p>Or send a photo, video or file:</p><button id="appUpload" type="button">Upload something \u{1F4CE}</button>`);appS.id='application';
+function appTarget(text){
+  /* If the entry ID is set, the text is also pre-filled into the form via the URL */
+  const m=String(C.appUrl).match(/\/forms\/d\/e\/([^\/?#]+)/);
+  if(m&&/^entry\.\d+$/.test(C.appField)){
+    const u="https://docs.google.com/forms/d/e/"+m[1]+"/viewform?usp=pp_url&"+C.appField+"="+encodeURIComponent(text);
+    if(u.length<=1900)return u;
+  }
+  return C.appUrl;
+}
+async function copyText(box,text){
+  let ok=false;
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);ok=true}}catch(e){}
+  if(!ok){try{box.focus();box.select();ok=document.execCommand("copy");box.setSelectionRange(0,0)}catch(e){}}
+  return ok;
+}
 async function sendApplication(){
   const box=document.getElementById("appText"),status=document.getElementById("appStatus"),btn=document.getElementById("appSend"),text=box.value.trim();
   if(!text){status.textContent="Write something first \u{1F90D}";return}
-  if(!/^entry\.\d+$/.test(CONFIG.appField)){status.textContent="Couldn't send right now. Please tell "+CONFIG.me+" 🤍";return}
-  btn.disabled=true;status.textContent="Sending...";
-  const body=new URLSearchParams();body.append(CONFIG.appField,text);
-  try{
-    await fetch(CONFIG.appUrl,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
-    status.textContent=`Sent \u{1F90D} ${CONFIG.me} will read it.`;box.value="";
-  }catch(e){status.textContent="Couldn't send. Please try again."}
-  btn.disabled=false;
+  btn.disabled=true;
+  const copied=await copyText(box,text);
+  const target=appTarget(text);
+  status.textContent=copied?"Copied \u{1F90D} Taking you to the form... (paste it there if the box is empty)":"Taking you to the form... (copy your text first if it does not appear)";
+  setTimeout(()=>{window.location.href=target},1200);
 }
 document.getElementById("appSend").addEventListener("click",sendApplication);
 document.getElementById("appUpload").addEventListener("click",()=>{window.open(CONFIG.uploadUrl,"_blank","noopener")});
